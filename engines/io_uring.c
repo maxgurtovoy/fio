@@ -727,6 +727,7 @@ static int fio_ioring_init(struct thread_data *td)
 	struct ioring_options *o = td->eo;
 	struct ioring_data *ld;
 	struct thread_options *to = &td->o;
+	int err;
 
 	if (to->io_submit_mode == IO_MODE_OFFLOAD) {
 		log_err("fio: io_submit_mode=offload is not compatible (or "
@@ -745,6 +746,10 @@ static int fio_ioring_init(struct thread_data *td)
 	}
 
 	ld = calloc(1, sizeof(*ld));
+	if (!ld) {
+		err = ENOMEM;
+		goto out_err;
+	}
 
 	/* ring depth must be a power-of-2 */
 	ld->iodepth = td->o.iodepth;
@@ -752,9 +757,17 @@ static int fio_ioring_init(struct thread_data *td)
 
 	/* io_u index */
 	ld->io_u_index = calloc(td->o.iodepth, sizeof(struct io_u *));
-	ld->iovecs = calloc(td->o.iodepth, sizeof(struct iovec));
+	if (!ld->io_u_index) {
+		err = ENOMEM;
+		goto out_free_ld;
+	}
 
-	td->io_ops_data = ld;
+	ld->iovecs = calloc(td->o.iodepth, sizeof(struct iovec));
+	if (!ld->iovecs) {
+		err = ENOMEM;
+		goto out_free_io_u;
+	}
+
 
 	/*
 	 * Check for option conflicts
@@ -763,8 +776,8 @@ static int fio_ioring_init(struct thread_data *td)
 			o->cmdprio_percentage != 0) {
 		log_err("%s: cmdprio_percentage option and mutually exclusive "
 				"prio or prioclass option is set, exiting\n", to->name);
-		td_verror(td, EINVAL, "fio_io_uring_init");
-		return 1;
+		err = EINVAL;
+		goto out_free_iovecs;
 	}
 
 	if (fio_option_is_set(&td->o, ioprio_class))
@@ -772,7 +785,19 @@ static int fio_ioring_init(struct thread_data *td)
 	if (fio_option_is_set(&td->o, ioprio))
 		ld->ioprio_set = true;
 
+	td->io_ops_data = ld;
+
 	return 0;
+
+out_free_iovecs:
+	free(ld->iovecs);
+out_free_io_u:
+	free(ld->io_u_index);
+out_free_ld:
+	free(ld);
+out_err:
+	td_verror(td, err, "fio_io_uring_init");
+	return 1;
 }
 
 static int fio_ioring_io_u_init(struct thread_data *td, struct io_u *io_u)
