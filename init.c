@@ -945,6 +945,18 @@ static int fixup_options(struct thread_data *td)
 	if (o->disable_slat)
 		o->slat_percentiles = 0;
 
+	if (o->discontig) {
+		if (!(td->io_ops->flags & FIO_DISCONTIGIO)) {
+			log_err("fio: %s ioengine doesn't support discontig IO\n",
+				td->io_ops->name);
+			ret |= 1;
+		}
+		if (o->verify != VERIFY_NONE) {
+			log_err("fio: can't verify discontig IO\n");
+			ret |= 1;
+		}
+	}
+
 	/*
 	 * Fix these up to be nsec internally
 	 */

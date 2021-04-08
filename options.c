@@ -4950,6 +4950,17 @@ struct fio_option fio_options[FIO_MAX_OPTS] = {
 		.group  = FIO_OPT_G_RUNTIME,
 	},
 	{
+		.name	= "discontig",
+		.lname	= "Discontig",
+		.type	= FIO_OPT_INT,
+		.off1	= offsetof(struct thread_options, discontig),
+		.maxval	= 4,
+		.help	= "The number of maximal discontiguous elements in a single IO operation",
+		.def	= "0",
+		.category = FIO_OPT_C_IO,
+		.group	= FIO_OPT_G_IO_TYPE,
+	},
+	{
 		.name = NULL,
 	},
 };

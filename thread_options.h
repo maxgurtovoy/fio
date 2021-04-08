@@ -357,6 +357,11 @@ struct thread_options {
 	unsigned int job_max_open_zones;
 	fio_fp64_t zrt;
 	fio_fp64_t zrf;
+
+	/*
+	 * discontig IO support
+	 */
+	unsigned int discontig;
 };
 
 #define FIO_TOP_STR_MAX		256
