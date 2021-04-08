@@ -1186,6 +1186,14 @@ cleanup:
 static void cleanup_io_u(struct thread_data *td)
 {
 	struct io_u *io_u;
+	int i;
+
+	if (td->o.discontig) {
+		for (i = 0; i < td->o.iodepth; i++) {
+			io_u = td->io_u_all.io_us[i];
+			free(io_u->discontig_buf);
+		}
+	}
 
 	while ((io_u = io_u_qpop(&td->io_u_freelist)) != NULL) {
 
@@ -1273,7 +1281,7 @@ int init_io_u_buffers(struct thread_data *td)
 {
 	struct io_u *io_u;
 	unsigned long long max_bs, min_write;
-	int i, max_units;
+	int i, j, max_units;
 	int data_xfer = 1;
 	char *p;
 
@@ -1321,6 +1329,14 @@ int init_io_u_buffers(struct thread_data *td)
 		io_u = td->io_u_all.io_us[i];
 		dprint(FD_MEM, "io_u alloc %p, index %u\n", io_u, i);
 
+		if (td->o.discontig) {
+			if (posix_memalign((void **)&io_u->discontig_buf, page_size,
+					   td->o.discontig_sz * td->o.discontig)) {
+				log_err("fio: Can't allocate memory for discontig IO. Reduce discontig or iodepth\n");
+				goto out_err;
+			}
+		}
+
 		if (data_xfer) {
 			io_u->buf = p;
 			dprint(FD_MEM, "io_u %p, mem %p\n", io_u, io_u->buf);
@@ -1339,6 +1355,17 @@ int init_io_u_buffers(struct thread_data *td)
 	}
 
 	return 0;
+
+out_err:
+	for (j = 0; j < i; j++) {
+		io_u = td->io_u_all.io_us[j];
+		free(io_u->discontig_buf);
+	}
+
+	if (data_xfer)
+		free_io_mem(td);
+
+	return 1;
 }
 
 /*

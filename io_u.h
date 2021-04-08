@@ -55,6 +55,11 @@ struct io_u {
 	void *buf;
 
 	/*
+	 * Buffer for vectored discontig IO pattern
+	 */
+	void *discontig_buf;
+
+	/*
 	 * Initial seed for generating the buffer contents
 	 */
 	uint64_t rand_seed;
