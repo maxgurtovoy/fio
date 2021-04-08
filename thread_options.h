@@ -362,6 +362,7 @@ struct thread_options {
 	 * discontig IO support
 	 */
 	unsigned int discontig;
+	unsigned int discontig_sz;
 };
 
 #define FIO_TOP_STR_MAX		256
