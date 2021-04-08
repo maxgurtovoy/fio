@@ -243,8 +243,10 @@ static int fio_ioring_prep(struct thread_data *td, struct io_u *io_u)
 			sqe->len = io_u->xfer_buflen;
 			sqe->buf_index = io_u->index;
 		} else {
-			struct iovec *iov = &ld->iovecs[io_u->index];
+			struct iovec *iov;
+			unsigned int discontig = td->o.discontig;
 
+			iov = &ld->iovecs[io_u->index * (1 + discontig)];
 			/*
 			 * Update based on actual io_u, requeue could have
 			 * adjusted these
@@ -257,8 +259,20 @@ static int fio_ioring_prep(struct thread_data *td, struct io_u *io_u)
 				sqe->addr = (unsigned long) iov->iov_base;
 				sqe->len = iov->iov_len;
 			} else {
+				unsigned int discontig_sz = td->o.discontig_sz;
+				int i;
+
 				sqe->addr = (unsigned long) iov;
-				sqe->len = 1;
+				for (i = 0; i < discontig && discontig_sz < iov->iov_len; i++) {
+					struct iovec *iov2;
+
+					iov2 = &ld->iovecs[io_u->index * (1 + discontig) + i + 1];
+					iov2->iov_base = &io_u->discontig_buf[discontig_sz * i];
+					iov2->iov_len = discontig_sz;
+
+					iov->iov_len -= discontig_sz; // decrease the original len
+				}
+				sqe->len = 1 + i;
 			}
 		}
 		if (!td->o.odirect && o->uncached)
@@ -735,6 +749,11 @@ static int fio_ioring_init(struct thread_data *td)
 		return 1;
 	}
 
+	if (to->discontig && o->nonvectored) {
+		log_err("fio: discontig IO is not supported for nonvectored read/write commands\n");
+		return 1;
+	}
+
 	/* sqthread submission requires registered files */
 	if (o->sqpoll_thread)
 		o->registerfiles = 1;
@@ -762,7 +781,8 @@ static int fio_ioring_init(struct thread_data *td)
 		goto out_free_ld;
 	}
 
-	ld->iovecs = calloc(td->o.iodepth, sizeof(struct iovec));
+	ld->iovecs = calloc(td->o.iodepth * (1 + to->discontig),
+			    sizeof(struct iovec));
 	if (!ld->iovecs) {
 		err = ENOMEM;
 		goto out_free_io_u;
@@ -835,7 +855,8 @@ static int fio_ioring_close_file(struct thread_data *td, struct fio_file *f)
 static struct ioengine_ops ioengine = {
 	.name			= "io_uring",
 	.version		= FIO_IOOPS_VERSION,
-	.flags			= FIO_ASYNCIO_SYNC_TRIM | FIO_NO_OFFLOAD,
+	.flags			= FIO_ASYNCIO_SYNC_TRIM | FIO_NO_OFFLOAD |
+				  FIO_DISCONTIGIO,
 	.init			= fio_ioring_init,
 	.post_init		= fio_ioring_post_init,
 	.io_u_init		= fio_ioring_io_u_init,
